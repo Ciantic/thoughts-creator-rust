@@ -1,0 +1,17 @@
+[package]
+name = "cianticblog"
+version = "0.1.0"
+authors = ["Jari Pennanen <ciantic@oksidi.com>"]
+edition = "2018"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+yew = "0.17"
+serde = "1.0"
+pulldown-cmark = "0.8.0"
+diesel = { version = "1.4.5", features = ["sqlite", "chrono"] }
+diesel_migrations = { version = "1.4.0", features = ["sqlite"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "0.8.1", features = ["serde", "v4"] }
