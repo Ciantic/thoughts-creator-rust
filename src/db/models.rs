@@ -1,12 +1,14 @@
-use super::ArticleId;
+use super::{ArticleId, ImageId, ResourceId, UrlId};
 use crate::db::schema::*;
 use chrono::NaiveDateTime;
 use chrono::Utc;
 
-#[derive(Debug, Queryable, Identifiable, Insertable, AsChangeset)]
+#[derive(
+    Debug, Queryable, Identifiable, Insertable, AsChangeset, serde::Serialize, serde::Deserialize,
+)]
 pub struct Article {
-    pub id: i32,
-    pub hash: ArticleId,
+    pub id: ArticleId,
+    pub hash: String,
     pub created: NaiveDateTime,
     pub modified: NaiveDateTime,
     pub modified_on_disk: NaiveDateTime,
@@ -19,8 +21,8 @@ pub struct Article {
 impl Article {
     pub fn new() -> Article {
         Article {
-            id: 0,
-            hash: ArticleId::generate(),
+            id: ArticleId::generate(),
+            hash: "".into(),
             created: Utc::now().naive_utc(),
             modified: Utc::now().naive_utc(),
             modified_on_disk: Utc::now().naive_utc(),
@@ -34,7 +36,7 @@ impl Article {
 
 #[derive(Debug, Queryable, Identifiable, Insertable, AsChangeset)]
 pub struct Resource {
-    pub id: i32,
+    pub id: ResourceId,
     pub modified_on_disk: NaiveDateTime,
     pub local_path: String,
     pub server_path: String,
@@ -42,7 +44,7 @@ pub struct Resource {
 
 #[derive(Debug, Queryable, Identifiable, Insertable, AsChangeset)]
 pub struct Image {
-    pub id: i32,
+    pub id: ImageId,
     pub modified_on_disk: NaiveDateTime,
     pub width: i32,
     pub height: i32,
@@ -52,6 +54,6 @@ pub struct Image {
 
 #[derive(Debug, Queryable, Identifiable, Insertable, AsChangeset)]
 pub struct Url {
-    pub id: i32,
+    pub id: UrlId,
     pub url: String,
 }

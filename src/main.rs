@@ -4,163 +4,132 @@ extern crate diesel;
 #[macro_use]
 extern crate diesel_migrations;
 
-#[macro_use]
 mod db;
+mod markdown;
+
+use std::path::PathBuf;
 
 use crate::db::models::Article;
-use diesel::{prelude::*, serialize::Output, sql_types::Timestamp, sqlite::Sqlite, types::ToSql};
+use db::{DbConnection, DbError};
+use diesel::{
+    prelude::*, r2d2::ConnectionManager, serialize::Output, sql_types::Timestamp, sqlite::Sqlite,
+    types::ToSql,
+};
 use diesel::{Connection, SqliteConnection};
 use diesel_migrations::embed_migrations;
-use pulldown_cmark::{escape, html, CodeBlockKind, Event, LinkType, Options, Parser, Tag};
+use futures::future::join_all;
+use glob::glob;
+
+use async_std::task::JoinHandle;
+use markdown::{compile_markdown_file, markdown_to_html};
+use r2d2::Pool;
 use yew::prelude::*;
 
-struct EventIter<'a> {
-    p: Parser<'a>,
-}
-
-impl<'a> EventIter<'a> {
-    pub fn new(p: Parser<'a>) -> Self {
-        EventIter { p }
-    }
-}
-
-// lazy_static! {
-// 	static ref AMMONIA_BUILDER :Builder<'static> = construct_ammonia_builder();
-// }
-
-impl<'a> Iterator for EventIter<'a> {
-    type Item = Event<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let next = self.p.next()?;
-
-        if let Event::Start(Tag::Image(LinkType::Inline, src, title)) = &next {
-            // TODO: There is no proper escaping library used here:
-            let imgtag = format!(
-                "<img src=\"{}\" title=\"{}\" width=\"\" height=\"\" />",
-                src.replace("\"", "&quot;"),
-                title.replace("\"", "&quot;")
-            );
-            return Some(Event::Html(imgtag.into()));
-        }
-
-        // match &next {
-        //     Event::Start(Tag::Image(l, n, d)) => {
-        //         println!("image {:?} {} {}", l, n, d);
-        //         return Some(Event::Html("IMG TAG HERE".into()));
-        //     },
-        //     _ => ()
-        // }
-
-        // if let &Event::Start(Tag::Image(t, _, _)) = &next {
-
-        //     return Some(next);
-        // }
-
-        // if let &Event::Start(Tag::CodeBlock(_)) = &next {
-        // 	// Codeblock time!
-        // 	let mut text_buf = String::new();
-        // 	let mut next = self.p.next();
-        // 	loop {
-        // 		if let Some(Event::Text(ref s)) = next {
-        // 			text_buf += s;
-        // 		} else {
-        // 			break;
-        // 		}
-        // 		next = self.p.next();
-        // 	}
-        // 	// let mut fmt = SyntectFormatter::new();
-        // 	match &next {
-        // 		Some(Event::End(Tag::CodeBlock(cb))) => {
-        //             println!("Foo");
-        // 			if let CodeBlockKind::Fenced(ref token) = cb {
-        // 				// fmt = fmt.token(token);
-        // 				println!("TTTTTTTTTTTTTTTTTTTTTTTTT {}", token);
-        // 			}
-        // 		},
-        // 		_ => panic!("Unexpected element inside codeblock mode {:?}", next),
-        // 	}
-        // 	// let formatted = fmt.highlight_snippet(&text_buf);
-        //     // return Some(Event::Html(formatted.into()));
-        //     return Some(Event::Html(text_buf.into()));
-        // }
-        Some(next)
-    }
-}
-
 embed_migrations!("migrations");
-
-fn get_articles(connection: &SqliteConnection) -> Vec<Article> {
-    use self::db::models::*;
-    use self::db::schema::articles::dsl::*;
-
-    let foo = articles.limit(5).load::<Article>(connection);
-
-    foo.expect("Error loading posts")
+#[derive(serde::Serialize, serde::Deserialize)]
+struct GenerateParams {
+    pub article_dir: String,
+    pub output_dir: String,
+    pub root_dir: String,
+    pub db_file: String,
+    pub clean_output: bool,
 }
 
-fn main() {
-    // let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let database_url = ":memory:";
+#[derive(Debug)]
+enum GenerateError {
+    IOError,
+    FileReadError(std::io::Error),
+    DbConnectionError(DbError),
+    CompileMarkdownError(markdown::Error),
+}
 
-    let connection = SqliteConnection::establish(&database_url)
-        .unwrap_or_else(|_| panic!("Error connecting to {}", database_url));
+async fn generate_article(file: PathBuf, pool: &DbConnection) -> Result<(), GenerateError> {
+    // let dbcon = pool.get().map_err(GenerateError::DbConnectionError)?;
+    let filepathstr = file.display().to_string();
+    let markdown = async_std::fs::read_to_string(file)
+        .await
+        .map_err(GenerateError::FileReadError)?;
 
-    let _ = embedded_migrations::run_with_output(&connection, &mut std::io::stdout());
+    let cm = compile_markdown_file(file).await?;
 
-    let ar = Article::new();
-    ar.save(&connection);
-    let ar = Article::new();
-    ar.save(&connection);
-    let results2 = get_articles(&connection);
+    let html = markdown_to_html(&markdown).await;
+    let mut article = Article::new();
+    article.title = "foo".into();
+    article.local_path = filepathstr;
+    article.html = html;
+    let _ = article.save(&pool).await;
+    Ok(())
+}
 
-    // results2.iter().map(|f| {
-    //     // let foo = Utc.from_utc_datetime(&f.created);
-    //     // let foo: DateTime<Utc> = Utc.from_utc_datetime(f.created);
+async fn generate(params: &GenerateParams, pool: DbConnection) {
+    let files_input = format!("{}/**/*.md", params.article_dir);
+    let files = glob(&files_input);
+
+    // Initialize the DB
+    let _ = embedded_migrations::run_with_output(&pool.get().unwrap(), &mut std::io::stdout());
+    let mut generate_threads: Vec<JoinHandle<Result<(), GenerateError>>> = vec![];
+
+    for entry in files.unwrap() {
+        let pool2 = pool.clone();
+
+        match entry {
+            Ok(path) => {
+                let thread = async_std::task::spawn(async move {
+                    println!("path {}", path.display());
+                    generate_article(path, &pool2).await?;
+                    Ok(())
+                });
+                generate_threads.push(thread);
+            }
+
+            // if the path matched but was unreadable,
+            // thereby preventing its contents from matching
+            Err(e) => println!("{:?}", e),
+        }
+    } // db!()
+
+    let foo = join_all(generate_threads);
+
+    let res = foo.await;
+    // let futures = generate_threads.iter().fold(|n| n.join());
+}
+
+#[derive(Debug)]
+enum MainError {
+    IOError,
+}
+
+#[async_std::main]
+async fn main() -> Result<(), MainError> {
+    let conman = ConnectionManager::<SqliteConnection>::new(".cache.db");
+    let pool = Pool::builder().max_size(15).build(conman).unwrap();
+
+    generate(
+        &GenerateParams {
+            article_dir: ".\\examples".into(),
+            clean_output: true,
+            db_file: ":memory:".into(),
+            output_dir: ".\\.out".into(),
+            root_dir: ".".into(),
+        },
+        DbConnection::new(pool),
+    )
+    .await;
+    // let conn = init_db();
+
+    // let thread = std::thread::spawn(move || {
+    //     println!("OPEN THREAD");
+    //     let conn = pool.get().unwrap();
+    //     let _ = embedded_migrations::run_with_output(&conn, &mut std::io::stdout());
+    //     Article::new().save(&conn);
+    //     Article::new().save(&conn);
+    //     let results2 = Article::get_all(&conn);
+    //     println!("{:?}", results2);
     // });
 
-    println!("results {:?}", results2);
+    // thread.join().unwrap();
 
-    // embedded_migrations::run(&conn);
-
-    let markdown_input = "
-    # foo
-
-    Lorem ipsum dolor sit amet, consectetuer adipiscing elit.
-    Duis tincidunt erat in purus ullamcorper ultricies. Duis 
-    lacinia aliquet dolor. 
-
-    ```bash
-    # My code block
-
-    echo \"Foo is here\"
-    ```
-
-    ![](./image.png \"with some title\")
-    
-    Maecenas velit enim, eleifend a, tempor eu, mattis in, nisl.
-    Maecenas ut orci. Sed egestas auctor sem. Curabitur vitae 
-    pede vel nisl tristique commodo. Phasellus ut nisl. Cras massa.
-     Suspendisse potenti. Vestibulum vitae augue. Mauris mauris sapien,
-     aliquet vitae, tincidunt ac, volutpat eu, ante. Nunc sed quam.
-    "
-    .replace("    ", "");
-
-    // Set up options and parser. Strikethroughs are not part of the CommonMark standard
-    // and we therefore must enable it explicitly.
-    let mut options = Options::empty();
-    options.insert(Options::ENABLE_STRIKETHROUGH);
-    options.insert(Options::ENABLE_FOOTNOTES);
-    options.insert(Options::ENABLE_TABLES);
-    let parser = Parser::new_ext(&markdown_input, options);
-    let ev_it = EventIter::new(parser);
-    // let iter = EventIter::new(parser);
-
-    // Write to String buffer.
-    let mut html_output = String::new();
-    html::push_html(&mut html_output, ev_it);
-
-    println!("{}", html_output);
+    // std::thread::
 
     // let content = html! {
     //     <html>
@@ -169,4 +138,5 @@ fn main() {
     //     </html>
     // };
     // println!("html {:?}", content);
+    Ok(())
 }
