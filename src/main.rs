@@ -7,7 +7,7 @@ extern crate diesel_migrations;
 mod db;
 mod markdown;
 
-use std::path::PathBuf;
+use async_std::path::PathBuf;
 
 use crate::db::models::Article;
 use db::{DbConnection, DbError};
@@ -21,7 +21,7 @@ use futures::future::join_all;
 use glob::glob;
 
 use async_std::task::JoinHandle;
-use markdown::{compile_markdown_file, markdown_to_html};
+use markdown::compile_markdown_file;
 use r2d2::Pool;
 use yew::prelude::*;
 
@@ -45,18 +45,18 @@ enum GenerateError {
 
 async fn generate_article(file: PathBuf, pool: &DbConnection) -> Result<(), GenerateError> {
     // let dbcon = pool.get().map_err(GenerateError::DbConnectionError)?;
-    let filepathstr = file.display().to_string();
-    let markdown = async_std::fs::read_to_string(file)
+    let markdown = async_std::fs::read_to_string(&file)
         .await
         .map_err(GenerateError::FileReadError)?;
 
-    let cm = compile_markdown_file(file).await?;
+    let cm = compile_markdown_file(&file)
+        .await
+        .map_err(GenerateError::CompileMarkdownError)?;
 
-    let html = markdown_to_html(&markdown).await;
     let mut article = Article::new();
     article.title = "foo".into();
-    article.local_path = filepathstr;
-    article.html = html;
+    article.local_path = file.to_string_lossy().into();
+    article.html = cm.html;
     let _ = article.save(&pool).await;
     Ok(())
 }
@@ -76,7 +76,7 @@ async fn generate(params: &GenerateParams, pool: DbConnection) {
             Ok(path) => {
                 let thread = async_std::task::spawn(async move {
                     println!("path {}", path.display());
-                    generate_article(path, &pool2).await?;
+                    generate_article(path.into(), &pool2).await?;
                     Ok(())
                 });
                 generate_threads.push(thread);
