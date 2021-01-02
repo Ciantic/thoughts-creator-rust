@@ -26,8 +26,7 @@ pub fn get_frontmatter(markdown: &str) -> Result<(Frontmatter, String), Error> {
                 frontmatter,
                 // Remove new lines following `---`
                 markdown_str
-                    .trim_start_matches("\r\n")
-                    .trim_start_matches('\n')
+                    .trim_start_matches(|c| c == '\r' || c == '\n')
                     .into(),
             ));
         }
