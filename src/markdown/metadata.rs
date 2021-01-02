@@ -20,6 +20,7 @@ pub struct CompiledMarkdown {
     pub old_url: Option<url::Url>,
     pub html: String,
 }
+
 pub async fn compile_markdown_file(path: &PathBuf) -> Result<CompiledMarkdown, Error> {
     let local_path = path.to_str().ok_or(Error::PathEncodingError)?.to_owned();
     let content = fs::read_to_string(&path).await.map_err(Error::IOError)?;
@@ -53,8 +54,6 @@ pub async fn compile_markdown_file(path: &PathBuf) -> Result<CompiledMarkdown, E
 
 #[cfg(test)]
 mod test_compile_markdown {
-    use async_std::path::PathBuf;
-
     use super::compile_markdown_file;
 
     #[async_std::test]
@@ -72,31 +71,25 @@ mod test_compile_markdown {
             .unwrap();
         // Notice that the title was separated from the rest of the markdown
         assert_eq!(post.title, "Second post");
-        assert_eq!(post.html, "<p>Lorem ipsum dolor sit amet!</p>\n<p><img src=\"./res01.svg\" title=\"\" width=\"\" height=\"\" />Test image</p>\n<p><img src=\"./res404.svg\" title=\"\" width=\"\" height=\"\" />Non-existing file</p>\n");
+        assert!(post.html.starts_with("<p>Lorem ipsum dolor sit amet!"));
     }
 }
 
+/// Get first title, and rest of the markdown
 fn first_title_rest(str: &str) -> (&str, &str) {
     let mut parts = str.splitn(2, '\n');
     (
         parts.next().unwrap().trim_start_matches('#').trim(),
-        parts.next().unwrap_or(""),
+        parts
+            .next()
+            .unwrap_or("")
+            .trim_start_matches(|c| c == '\r' || c == '\n'),
     )
-}
-
-/// Get markdown title
-fn first_title(str: &str) -> &str {
-    // Get first line, and remove leading hashes
-    str.lines()
-        .next()
-        .unwrap_or(str)
-        .trim_start_matches('#')
-        .trim()
 }
 
 #[cfg(test)]
 mod test_first_title {
-    use super::{first_title, first_title_rest};
+    use super::first_title_rest;
 
     #[test]
     fn test_first_title_rest() {
@@ -106,25 +99,22 @@ mod test_first_title {
             ("", " this is not the title")
         );
         assert_eq!(first_title_rest("sole line"), ("sole line", ""));
+
         assert_eq!(
             first_title_rest("the title \n second line"),
             ("the title", " second line")
         );
+
+        // Trim the start of second line from new lines:
         assert_eq!(
-            first_title_rest("# the title \r\n second line"),
+            first_title_rest("the title \n\n\r\n second line"),
             ("the title", " second line")
         );
+
+        // But it doesn't affect the third line
         assert_eq!(
             first_title_rest("## the title \r\n second line \r\n third line"),
             ("the title", " second line \r\n third line")
         );
-    }
-    #[test]
-    fn test_first_title() {
-        assert_eq!(first_title("\n this is not the title"), "");
-        assert_eq!(first_title("sole line"), "sole line");
-        assert_eq!(first_title("the title \n second line"), "the title");
-        assert_eq!(first_title("# the title \r\n second line"), "the title");
-        assert_eq!(first_title("## the title \r\n second line"), "the title");
     }
 }
