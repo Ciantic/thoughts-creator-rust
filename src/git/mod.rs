@@ -1,12 +1,8 @@
-use async_std::path::{Path, PathBuf};
-use chrono::{DateTime, TimeZone, Utc};
-use std::{
-    ffi::OsStr,
-    path::{Component, Components},
-    process::{Command, ExitStatus, Stdio},
-};
+use std::ffi::OsStr;
 
-// TODO: async_std process is nightly, replace with that in future
+use async_std::path::PathBuf;
+use async_std::process::{Command, Stdio};
+use chrono::{DateTime, Utc};
 
 #[derive(Debug)]
 pub enum Error {
@@ -20,7 +16,7 @@ trait MaybeArg {
     fn arg_if<S: AsRef<OsStr>>(&mut self, arg: Option<S>) -> &mut Self;
 }
 
-impl MaybeArg for std::process::Command {
+impl MaybeArg for Command {
     fn arg_if<S: AsRef<OsStr>>(&mut self, arg: Option<S>) -> &mut Command {
         if let Some(a) = arg {
             self.arg(a)
@@ -47,7 +43,7 @@ async fn git_date(file: &PathBuf, flag: Option<&str>) -> Result<DateTime<Utc>, E
         .stdout(Stdio::piped()) // redirect the stdout
         .stderr(Stdio::piped()); // redirect the stderr;
 
-    let out = cmd.output().map_err(Error::IOError)?;
+    let out = cmd.output().await.map_err(Error::IOError)?;
     match out.status.code() {
         Some(0) => {
             let out_str = String::from_utf8_lossy(&out.stdout);
