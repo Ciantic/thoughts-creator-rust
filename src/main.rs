@@ -5,6 +5,7 @@ extern crate diesel;
 extern crate diesel_migrations;
 
 mod db;
+mod git;
 mod markdown;
 
 use async_std::path::PathBuf;
