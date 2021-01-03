@@ -75,6 +75,6 @@ mod test_git_date {
         let created = git_modified(&"./examples/articles/post01.md".into())
             .await
             .unwrap();
-        assert_eq!(created, Utc.ymd(2021, 1, 1).and_hms(20, 56, 55));
+        assert_eq!(created, Utc.ymd(2021, 1, 3).and_hms(12, 42, 37));
     }
 }
