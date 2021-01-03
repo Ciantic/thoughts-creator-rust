@@ -53,17 +53,17 @@ async fn generate_article_db(file: PathBuf, pool: &DbConnection) -> Result<Artic
     article.server_path = format!("/articles/{}", cm.slug);
     article.save(&pool).await?;
 
-    generate_resources_db(article);
-    generate_images_db(article);
+    // generate_resources_db(&article).await?;
+    // generate_images_db(&article).await?;
 
     Ok(article)
 }
 
-async fn generate_resources_db(article: Article) -> Result<(), Error> {
+async fn generate_resources_db(article: &Article) -> Result<(), Error> {
     todo!()
 }
 
-async fn generate_images_db(article: Article) -> Result<(), Error> {
+async fn generate_images_db(article: &Article) -> Result<(), Error> {
     todo!()
 }
 
