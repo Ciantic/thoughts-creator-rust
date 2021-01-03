@@ -1,10 +1,11 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
+use derive_more::From;
 use serde::Deserialize;
 
-#[derive(Debug)]
+#[derive(Debug, From)]
 pub enum Error {
     // ParseError(serde::)
-    ParseError(serde_yaml::Error),
+    YamlParseError(serde_yaml::Error),
 }
 
 #[derive(Debug, Eq, PartialEq, Deserialize, Default)]
@@ -19,8 +20,7 @@ pub fn get_frontmatter(markdown: &str) -> Result<(Frontmatter, String), Error> {
         let parts: Vec<&str> = markdown.splitn(3, "---").collect();
         if parts.len() == 3 {
             let frontmatter_str = parts[1];
-            let frontmatter =
-                serde_yaml::from_str::<Frontmatter>(frontmatter_str).map_err(Error::ParseError)?;
+            let frontmatter = serde_yaml::from_str::<Frontmatter>(frontmatter_str)?;
             let markdown_str = parts[2];
             return Ok((
                 frontmatter,

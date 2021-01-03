@@ -8,23 +8,19 @@ mod db;
 mod git;
 mod markdown;
 
-use async_std::path::PathBuf;
-
 use crate::db::models::Article;
+use async_std::channel::unbounded;
+use async_std::path::PathBuf;
+use async_std::task::JoinHandle;
 use db::{DbConnection, DbError};
-use diesel::{
-    prelude::*, r2d2::ConnectionManager, serialize::Output, sql_types::Timestamp, sqlite::Sqlite,
-    types::ToSql,
-};
-use diesel::{Connection, SqliteConnection};
+use derive_more::From;
+use diesel::r2d2::ConnectionManager;
+use diesel::SqliteConnection;
 use diesel_migrations::embed_migrations;
 use futures::future::join_all;
 use glob::glob;
-
-use async_std::task::JoinHandle;
 use markdown::compile_markdown_file;
 use r2d2::Pool;
-use yew::prelude::*;
 
 embed_migrations!("migrations");
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -36,7 +32,7 @@ struct GenerateParams {
     pub clean_output: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, From)]
 enum GenerateError {
     IOError,
     FileReadError(std::io::Error),
@@ -44,21 +40,19 @@ enum GenerateError {
     CompileMarkdownError(markdown::Error),
 }
 
-async fn generate_article(file: PathBuf, pool: &DbConnection) -> Result<(), GenerateError> {
-    // let dbcon = pool.get().map_err(GenerateError::DbConnectionError)?;
-    let markdown = async_std::fs::read_to_string(&file)
-        .await
-        .map_err(GenerateError::FileReadError)?;
-
-    let cm = compile_markdown_file(&file)
-        .await
-        .map_err(GenerateError::CompileMarkdownError)?;
-
+async fn generate_article_db(file: PathBuf, pool: &DbConnection) -> Result<Article, GenerateError> {
+    let markdown = async_std::fs::read_to_string(&file).await?;
+    let cm = compile_markdown_file(&file).await?;
     let mut article = Article::new();
     article.title = "foo".into();
     article.local_path = file.to_string_lossy().into();
     article.html = cm.html;
     let _ = article.save(&pool).await;
+    Ok(article)
+}
+
+async fn generate_article(file: PathBuf, pool: &DbConnection) -> Result<(), GenerateError> {
+    let article = generate_article_db(file, pool).await?;
     Ok(())
 }
 
@@ -77,7 +71,7 @@ async fn generate(params: &GenerateParams, pool: DbConnection) {
             Ok(path) => {
                 let thread = async_std::task::spawn(async move {
                     println!("path {}", path.display());
-                    generate_article(path.into(), &pool2).await?;
+                    generate_article_db(path.into(), &pool2).await?;
                     Ok(())
                 });
                 generate_threads.push(thread);

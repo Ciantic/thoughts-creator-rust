@@ -31,7 +31,7 @@ impl DbConnection {
         let c: PooledConnection<ConnectionManager<SqliteConnection>> = self
             .pool
             .get_timeout(std::time::Duration::from_secs(12))
-            .map_err(|_| DbError::ConnectionError)?;
+            .map_err(|e| DbError::ConnectionError)?;
         Ok(c)
     }
 }

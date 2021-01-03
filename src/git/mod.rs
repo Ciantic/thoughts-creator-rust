@@ -2,13 +2,15 @@ use std::ffi::OsStr;
 
 use async_std::path::PathBuf;
 use async_std::process::{Command, Stdio};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, ParseError, Utc};
+use derive_more::From;
 
-#[derive(Debug)]
+#[derive(Debug, From)]
 pub enum Error {
+    FilePathSeparationError,
     SignalTerminated,
     ExitError(i32, String),
-    DateParseError,
+    DateParseError(ParseError),
     IOError(std::io::Error),
 }
 
@@ -27,11 +29,8 @@ impl MaybeArg for Command {
 }
 
 async fn git_date(file: &PathBuf, flag: Option<&str>) -> Result<DateTime<Utc>, Error> {
-    let file = file.canonicalize().await.map_err(Error::IOError)?;
-
-    // After canonicalization the path is guaranteed to have filename and dirname
-    let filename = file.file_name().unwrap();
-    let dirname = file.parent().unwrap();
+    let filename = file.file_name().ok_or(Error::FilePathSeparationError)?;
+    let dirname = file.parent().ok_or(Error::FilePathSeparationError)?;
 
     let mut cmd = Command::new("git");
     cmd.current_dir(dirname)
@@ -43,13 +42,12 @@ async fn git_date(file: &PathBuf, flag: Option<&str>) -> Result<DateTime<Utc>, E
         .stdout(Stdio::piped()) // redirect the stdout
         .stderr(Stdio::piped()); // redirect the stderr;
 
-    let out = cmd.output().await.map_err(Error::IOError)?;
+    let out = cmd.output().await?;
     match out.status.code() {
         Some(0) => {
             let out_str = String::from_utf8_lossy(&out.stdout);
-            DateTime::parse_from_str(&out_str, "%Y-%m-%d %H:%M:%S %z")
-                .map_err(|_| Error::DateParseError)
-                .map(|d| d.into())
+            let datetime = DateTime::parse_from_str(&out_str, "%Y-%m-%d %H:%M:%S %z")?.into();
+            Ok(datetime)
         }
         Some(err) => Err(Error::ExitError(
             err,

@@ -257,6 +257,7 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "chrono",
+ "derive_more",
  "diesel",
  "diesel_migrations",
  "futures",
@@ -299,6 +300,17 @@ dependencies = [
  "autocfg",
  "cfg-if 1.0.0",
  "lazy_static",
+]
+
+[[package]]
+name = "derive_more"
+version = "0.99.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41cb0e6161ad61ed084a36ba71fbba9e3ac5aee3606fb607fe08da6acbcf3d8c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

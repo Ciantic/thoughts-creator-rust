@@ -1,13 +1,13 @@
 use async_std::{fs, path::PathBuf};
 use chrono::{DateTime, NaiveDateTime, Utc};
+use derive_more::From;
 
 use crate::git;
 
 use super::{frontmatter, to_html::markdown_to_html};
 
-#[derive(Debug)]
+#[derive(Debug, From)]
 pub enum Error {
-    PathEncodingError,
     GitError(git::Error),
     FrontmatterParseError(frontmatter::Error),
     IOError(std::io::Error),
@@ -19,18 +19,17 @@ pub struct CompiledMarkdown {
     pub published: DateTime<Utc>,
     pub modified: DateTime<Utc>,
     pub modified_on_disk: DateTime<Utc>,
-    pub local_path: String,
+    pub local_path: PathBuf,
     pub old_url: Option<url::Url>,
     pub html: String,
 }
 
 pub async fn compile_markdown_file(path: &PathBuf) -> Result<CompiledMarkdown, Error> {
-    let local_path = path.to_str().ok_or(Error::PathEncodingError)?.to_owned();
-    let content = fs::read_to_string(&path).await.map_err(Error::IOError)?;
-    let metadata = fs::metadata(&path).await.map_err(Error::IOError)?;
-    let modified_on_disk: DateTime<Utc> = metadata.modified().map_err(Error::IOError)?.into();
-    let (frontmatter, markdown_all) =
-        frontmatter::get_frontmatter(&content).map_err(Error::FrontmatterParseError)?;
+    let path = path.canonicalize().await?;
+    let content = fs::read_to_string(&path).await?;
+    let metadata = fs::metadata(&path).await?;
+    let modified_on_disk = metadata.modified()?.into();
+    let (frontmatter, markdown_all) = frontmatter::get_frontmatter(&content)?;
     let (title, markdown): (String, String) = match frontmatter.title {
         None => {
             // Since front matter does not contain title, this takes the first
@@ -45,16 +44,16 @@ pub async fn compile_markdown_file(path: &PathBuf) -> Result<CompiledMarkdown, E
     let html = markdown_to_html(&markdown).await;
     let published = match frontmatter.published {
         Some(f) => f,
-        None => git::git_created(&path).await.map_err(Error::GitError)?,
+        None => git::git_created(&path).await?,
     };
-    let modified = git::git_modified(&path).await.map_err(Error::GitError)?;
+    let modified = git::git_modified(&path).await?;
 
     Ok(CompiledMarkdown {
         title,
         old_url: frontmatter.old_url,
         modified,
         modified_on_disk,
-        local_path,
+        local_path: path,
         published,
         html,
     })
