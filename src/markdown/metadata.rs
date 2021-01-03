@@ -44,7 +44,7 @@ pub async fn compile_markdown_file(path: &PathBuf) -> Result<CompiledMarkdown, E
     let html = markdown_to_html(&markdown).await;
     let published = match frontmatter.published {
         Some(f) => f,
-        None => git::git_created(&path).await?,
+        None => git::git_added(&path).await?,
     };
     let modified = git::git_modified(&path).await?;
 

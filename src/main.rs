@@ -12,7 +12,7 @@ use crate::db::models::Article;
 use async_std::channel::unbounded;
 use async_std::path::PathBuf;
 use async_std::task::JoinHandle;
-use db::{DbConnection, DbError};
+use db::{DbConnection, Error};
 use derive_more::From;
 use diesel::r2d2::ConnectionManager;
 use diesel::SqliteConnection;
@@ -36,16 +36,18 @@ struct GenerateParams {
 enum GenerateError {
     IOError,
     FileReadError(std::io::Error),
-    DbConnectionError(DbError),
+    DbConnectionError(Error),
     CompileMarkdownError(markdown::Error),
 }
 
 async fn generate_article_db(file: PathBuf, pool: &DbConnection) -> Result<Article, GenerateError> {
-    let markdown = async_std::fs::read_to_string(&file).await?;
     let cm = compile_markdown_file(&file).await?;
     let mut article = Article::new();
-    article.title = "foo".into();
-    article.local_path = file.to_string_lossy().into();
+    article.title = cm.title;
+    article.local_path = cm.local_path.to_string_lossy().into_owned();
+    article.created = cm.published.naive_utc();
+    article.modified = cm.modified.naive_utc();
+    article.modified_on_disk = cm.modified_on_disk.naive_utc();
     article.html = cm.html;
     let _ = article.save(&pool).await;
     Ok(article)

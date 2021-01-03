@@ -10,12 +10,12 @@ use r2d2::{Pool, PooledConnection};
 use std::io::Write;
 
 #[derive(Debug)]
-pub enum DbError {
+pub enum Error {
     NotFound,
     ConnectionError,
 }
 
-pub type DbResult<T> = Result<T, DbError>;
+pub type DbResult<T> = Result<T, Error>;
 
 #[derive(Clone)]
 pub struct DbConnection {
@@ -31,7 +31,7 @@ impl DbConnection {
         let c: PooledConnection<ConnectionManager<SqliteConnection>> = self
             .pool
             .get_timeout(std::time::Duration::from_secs(12))
-            .map_err(|e| DbError::ConnectionError)?;
+            .map_err(|e| Error::ConnectionError)?;
         Ok(c)
     }
 }

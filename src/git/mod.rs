@@ -57,7 +57,7 @@ async fn git_date(file: &PathBuf, flag: Option<&str>) -> Result<DateTime<Utc>, E
     }
 }
 
-pub async fn git_created(file: &PathBuf) -> Result<DateTime<Utc>, Error> {
+pub async fn git_added(file: &PathBuf) -> Result<DateTime<Utc>, Error> {
     git_date(file, Some("--diff-filter=A")).await
 }
 
@@ -67,12 +67,12 @@ pub async fn git_modified(file: &PathBuf) -> Result<DateTime<Utc>, Error> {
 
 #[cfg(test)]
 mod test_git_date {
-    use super::{git_created, git_modified};
+    use super::{git_added, git_modified};
     use chrono::{TimeZone, Utc};
 
     #[async_std::test]
     async fn test_git_created() {
-        let created = git_created(&"./examples/articles/post01.md".into())
+        let created = git_added(&"./examples/articles/post01.md".into())
             .await
             .unwrap();
         assert_eq!(created, Utc.ymd(2021, 1, 1).and_hms(20, 56, 55));
