@@ -3,53 +3,78 @@ use chrono::{DateTime, TimeZone, Utc};
 use std::{
     ffi::OsStr,
     path::{Component, Components},
-    process::Command,
+    process::{Command, Stdio},
 };
 #[derive(Debug)]
 pub enum Error {
+    GitDateParseFailure,
     IOError(std::io::Error),
 }
 
-pub async fn git_date(file: &PathBuf, flag: String) -> Result<DateTime<Utc>, Error> {
-    let file = file.canonicalize().await.map_err(Error::IOError)?;
-
-    // let filename = com.last();
-    // let dirname = com.as_path();
-    let cmd = Command::new("git")
-        .arg("log")
-        .arg("-1")
-        .arg(flag)
-        .arg("--pretty=format:%ci")
-        .arg(file.file_name().unwrap_or(OsStr::new("")));
-
-    todo!()
+trait MaybeArg {
+    fn arg_if<S: AsRef<OsStr>>(&mut self, arg: Option<S>) -> &mut Self;
 }
 
-fn split_dir_and_file_name(file: &PathBuf) -> (Option<&Path>, Option<&OsStr>) {
-    (file.parent(), file.file_name())
+impl MaybeArg for std::process::Command {
+    fn arg_if<S: AsRef<OsStr>>(&mut self, arg: Option<S>) -> &mut Command {
+        if let Some(a) = arg {
+            self.arg(a)
+        } else {
+            self
+        }
+    }
+}
 
-    // If there is a way, then there is a determination, this is funny:
-    //
-    // file.iter().rev().fold((None, None), |df, item| match df {
-    //     (None, None) => (None, Some(item.into())),
-    //     (Some(d), f) => (Some(PathBuf::from(item).join(d)), f),
-    //     (None, f) => (Some(PathBuf::new().join(item)), f),
-    // })
+async fn git_date(file: &PathBuf, flag: Option<&str>) -> Result<DateTime<Utc>, Error> {
+    let file = file.canonicalize().await.map_err(Error::IOError)?;
+
+    // After canonicalization the path is guaranteed to have filename and dirname
+    let filename = file.file_name().unwrap();
+    let dirname = file.parent().unwrap();
+
+    let mut cmd = Command::new("git");
+    cmd.current_dir(dirname)
+        .arg("log")
+        .arg("-1")
+        .arg("--pretty=format:%ci")
+        .arg_if(flag)
+        .arg(filename)
+        .stdout(Stdio::piped()) // redirect the stdout
+        .stderr(Stdio::piped()); // redirect the stderr;
+
+    let out = cmd.output().map_err(Error::IOError)?;
+    let out_str = String::from_utf8_lossy(&out.stdout);
+    DateTime::parse_from_str(&out_str, "%Y-%m-%d %H:%M:%S %z")
+        .map_err(|_| Error::GitDateParseFailure)
+        .map(|d| d.into())
+}
+
+pub async fn git_created(file: &PathBuf) -> Result<DateTime<Utc>, Error> {
+    git_date(file, Some("--diff-filter=A")).await
+}
+
+pub async fn git_modified(file: &PathBuf) -> Result<DateTime<Utc>, Error> {
+    git_date(file, None).await
 }
 
 #[cfg(test)]
-mod test_frontmatter {
-    use async_std::path::PathBuf;
-
-    use super::split_dir_and_file_name;
+mod test_git_date {
+    use super::{git_created, git_modified};
+    use chrono::{DateTime, TimeZone, Utc};
 
     #[async_std::test]
-    async fn test_split_filename() {
-        let filepath = PathBuf::from(&"./examples/articles/post01.md")
-            .canonicalize()
+    async fn test_git_created() {
+        let created = git_created(&"./examples/articles/post01.md".into())
             .await
             .unwrap();
-        let (a, b) = split_dir_and_file_name(&filepath);
-        println!("{:?} {:?}", a, b);
+        assert_eq!(created, Utc.ymd(2021, 1, 1).and_hms(20, 56, 55));
+    }
+
+    #[async_std::test]
+    async fn test_git_modified() {
+        let created = git_modified(&"./examples/articles/post01.md".into())
+            .await
+            .unwrap();
+        assert_eq!(created, Utc.ymd(2021, 1, 1).and_hms(20, 56, 55));
     }
 }
