@@ -36,7 +36,7 @@ async fn git_date(file: &PathBuf, flag: Option<&str>) -> Result<DateTime<Utc>, E
     cmd.current_dir(dirname)
         .arg("log")
         .arg("-1")
-        .arg("--pretty=format:%ci")
+        .arg("--pretty=format:%cD")
         .arg_if(flag)
         .arg(filename)
         .stdout(Stdio::piped()) // redirect the stdout
@@ -46,7 +46,7 @@ async fn git_date(file: &PathBuf, flag: Option<&str>) -> Result<DateTime<Utc>, E
     match out.status.code() {
         Some(0) => {
             let out_str = String::from_utf8_lossy(&out.stdout);
-            let datetime = DateTime::parse_from_str(&out_str, "%Y-%m-%d %H:%M:%S %z")?.into();
+            let datetime = DateTime::parse_from_rfc2822(&out_str)?.into();
             Ok(datetime)
         }
         Some(err) => Err(Error::ExitError(
