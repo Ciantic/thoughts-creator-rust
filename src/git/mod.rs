@@ -3,11 +3,16 @@ use chrono::{DateTime, TimeZone, Utc};
 use std::{
     ffi::OsStr,
     path::{Component, Components},
-    process::{Command, Stdio},
+    process::{Command, ExitStatus, Stdio},
 };
+
+// TODO: async_std process is nightly, replace with that in future
+
 #[derive(Debug)]
 pub enum Error {
-    GitDateParseFailure,
+    SignalTerminated,
+    ExitError(i32, String),
+    DateParseError,
     IOError(std::io::Error),
 }
 
@@ -43,10 +48,19 @@ async fn git_date(file: &PathBuf, flag: Option<&str>) -> Result<DateTime<Utc>, E
         .stderr(Stdio::piped()); // redirect the stderr;
 
     let out = cmd.output().map_err(Error::IOError)?;
-    let out_str = String::from_utf8_lossy(&out.stdout);
-    DateTime::parse_from_str(&out_str, "%Y-%m-%d %H:%M:%S %z")
-        .map_err(|_| Error::GitDateParseFailure)
-        .map(|d| d.into())
+    match out.status.code() {
+        Some(0) => {
+            let out_str = String::from_utf8_lossy(&out.stdout);
+            DateTime::parse_from_str(&out_str, "%Y-%m-%d %H:%M:%S %z")
+                .map_err(|_| Error::DateParseError)
+                .map(|d| d.into())
+        }
+        Some(err) => Err(Error::ExitError(
+            err,
+            String::from_utf8_lossy(&out.stderr).to_string(),
+        )),
+        None => Err(Error::SignalTerminated),
+    }
 }
 
 pub async fn git_created(file: &PathBuf) -> Result<DateTime<Utc>, Error> {
@@ -60,7 +74,7 @@ pub async fn git_modified(file: &PathBuf) -> Result<DateTime<Utc>, Error> {
 #[cfg(test)]
 mod test_git_date {
     use super::{git_created, git_modified};
-    use chrono::{DateTime, TimeZone, Utc};
+    use chrono::{TimeZone, Utc};
 
     #[async_std::test]
     async fn test_git_created() {

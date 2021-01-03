@@ -1,11 +1,14 @@
 use async_std::{fs, path::PathBuf};
 use chrono::{DateTime, NaiveDateTime, Utc};
 
+use crate::git;
+
 use super::{frontmatter, to_html::markdown_to_html};
 
 #[derive(Debug)]
 pub enum Error {
     PathEncodingError,
+    GitError(git::Error),
     FrontmatterParseError(frontmatter::Error),
     IOError(std::io::Error),
 }
@@ -13,9 +16,9 @@ pub enum Error {
 #[derive(Debug, Eq, PartialEq)]
 pub struct CompiledMarkdown {
     pub title: String,
-    pub published: NaiveDateTime,
-    pub modified: NaiveDateTime,
-    pub modified_on_disk: NaiveDateTime,
+    pub published: DateTime<Utc>,
+    pub modified: DateTime<Utc>,
+    pub modified_on_disk: DateTime<Utc>,
     pub local_path: String,
     pub old_url: Option<url::Url>,
     pub html: String,
@@ -40,14 +43,19 @@ pub async fn compile_markdown_file(path: &PathBuf) -> Result<CompiledMarkdown, E
         Some(title) => (title, markdown_all.to_owned()),
     };
     let html = markdown_to_html(&markdown).await;
+    let published = match frontmatter.published {
+        Some(f) => f,
+        None => git::git_created(&path).await.map_err(Error::GitError)?,
+    };
+    let modified = git::git_modified(&path).await.map_err(Error::GitError)?;
 
     Ok(CompiledMarkdown {
         title,
         old_url: frontmatter.old_url,
-        modified: chrono::Local::now().naive_utc(),
-        modified_on_disk: modified_on_disk.naive_utc(),
+        modified,
+        modified_on_disk,
         local_path,
-        published: chrono::Local::now().naive_local(),
+        published,
         html,
     })
 }
