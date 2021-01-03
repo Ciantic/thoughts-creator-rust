@@ -12,7 +12,7 @@ use crate::db::models::Article;
 use async_std::channel::unbounded;
 use async_std::path::PathBuf;
 use async_std::task::JoinHandle;
-use db::{DbConnection, Error};
+use db::DbConnection;
 use derive_more::From;
 use diesel::r2d2::ConnectionManager;
 use diesel::SqliteConnection;
@@ -33,14 +33,13 @@ struct GenerateParams {
 }
 
 #[derive(Debug, From)]
-enum GenerateError {
-    IOError,
-    FileReadError(std::io::Error),
-    DbConnectionError(Error),
+enum Error {
+    IOError(std::io::Error),
+    DbError(db::Error),
     CompileMarkdownError(markdown::Error),
 }
 
-async fn generate_article_db(file: PathBuf, pool: &DbConnection) -> Result<Article, GenerateError> {
+async fn generate_article_db(file: PathBuf, pool: &DbConnection) -> Result<Article, Error> {
     let cm = compile_markdown_file(&file).await?;
     let mut article = Article::new();
     article.title = cm.title;
@@ -49,11 +48,38 @@ async fn generate_article_db(file: PathBuf, pool: &DbConnection) -> Result<Artic
     article.modified = cm.modified.naive_utc();
     article.modified_on_disk = cm.modified_on_disk.naive_utc();
     article.html = cm.html;
-    let _ = article.save(&pool).await;
+
+    // TODO: Colliding slugs?
+    article.server_path = format!("/articles/{}", cm.slug);
+    article.save(&pool).await?;
+
+    generate_resources_db(article);
+    generate_images_db(article);
+
     Ok(article)
 }
 
-async fn generate_article(file: PathBuf, pool: &DbConnection) -> Result<(), GenerateError> {
+async fn generate_resources_db(article: Article) -> Result<(), Error> {
+    todo!()
+}
+
+async fn generate_images_db(article: Article) -> Result<(), Error> {
+    todo!()
+}
+
+async fn update_html_imagesizes(
+    html: String,
+    local_path: PathBuf,
+    pool: &DbConnection,
+) -> Result<String, Error> {
+    todo!()
+}
+
+async fn layout_article(article: Article, pool: &DbConnection) -> Result<String, Error> {
+    todo!()
+}
+
+async fn generate_article(file: PathBuf, pool: &DbConnection) -> Result<(), Error> {
     let article = generate_article_db(file, pool).await?;
     Ok(())
 }
@@ -64,7 +90,7 @@ async fn generate(params: &GenerateParams, pool: DbConnection) {
 
     // Initialize the DB
     let _ = embedded_migrations::run_with_output(&pool.get().unwrap(), &mut std::io::stdout());
-    let mut generate_threads: Vec<JoinHandle<Result<(), GenerateError>>> = vec![];
+    let mut generate_threads: Vec<JoinHandle<Result<(), Error>>> = vec![];
 
     for entry in files.unwrap() {
         let pool2 = pool.clone();

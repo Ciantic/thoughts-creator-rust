@@ -8,6 +8,7 @@ use super::{frontmatter, to_html::markdown_to_html};
 
 #[derive(Debug, From)]
 pub enum Error {
+    FileNameError,
     GitError(git::Error),
     FrontmatterParseError(frontmatter::Error),
     IOError(std::io::Error),
@@ -15,6 +16,7 @@ pub enum Error {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct CompiledMarkdown {
+    pub slug: String,
     pub title: String,
     pub published: DateTime<Utc>,
     pub modified: DateTime<Utc>,
@@ -47,8 +49,15 @@ pub async fn compile_markdown_file(path: &PathBuf) -> Result<CompiledMarkdown, E
         None => git::git_added(&path).await?,
     };
     let modified = git::git_modified(&path).await?;
+    let slug = path
+        .file_name()
+        .ok_or(Error::FileNameError)?
+        .to_string_lossy()
+        .trim_end_matches(".md")
+        .into();
 
     Ok(CompiledMarkdown {
+        slug,
         title,
         old_url: frontmatter.old_url,
         modified,
