@@ -26,7 +26,6 @@ pub fn get_relative_urls(html: String) -> Vec<RelativeUrl> {
 pub enum Error {
     UrlCreationFailed,
     CanonicalizationFailed(std::io::Error),
-    FileOpenFailed(std::io::Error),
     UrlParsingFailed(url::ParseError),
 }
 
@@ -139,7 +138,7 @@ end"#;
         ($expression:expr, $($pattern:tt)+) => {
             match $expression {
                 $($pattern)+ => (),
-                ref e => panic!("expected {} but got {:?}", stringify!($($pattern)+), e),
+                ref e => panic!("expected `{}` but got `{:?}`", stringify!($($pattern)+), e),
             }
         }
     }
