@@ -7,6 +7,7 @@ extern crate diesel_migrations;
 mod db;
 mod git;
 mod markdown;
+mod urls;
 
 use crate::db::models::Article;
 use async_std::channel::unbounded;
@@ -52,6 +53,13 @@ async fn generate_article_db(file: PathBuf, pool: &DbConnection) -> Result<Artic
     // TODO: Colliding slugs?
     article.server_path = format!("/articles/{}", cm.slug);
     article.save(&pool).await?;
+
+    // get_relative_urls() -> url list
+    //   relative_urls -> normalize url by article.server_path
+    //   find article or page by the local_path
+    //   rewrite the URL in HTML
+
+    // get_external_urls(html) -> url list
 
     // generate_resources_db(&article).await?;
     // generate_images_db(&article).await?;
