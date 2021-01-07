@@ -54,7 +54,7 @@ async fn generate_article_db(
     let mut article = Article::new();
     article.title = markdown.title;
     article.local_path = markdown.local_path.to_string_lossy().into_owned();
-    article.created = markdown.published.naive_utc();
+    article.published = markdown.published.naive_utc();
     article.modified = markdown.modified.naive_utc();
     article.modified_on_disk = markdown.modified_on_disk.naive_utc();
     article.html = converted.html;

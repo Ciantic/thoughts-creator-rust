@@ -9,7 +9,7 @@ use chrono::Utc;
 pub struct Article {
     pub id: ArticleId,
     pub hash: String,
-    pub created: NaiveDateTime,
+    pub published: NaiveDateTime,
     pub modified: NaiveDateTime,
     pub modified_on_disk: NaiveDateTime,
     pub local_path: String,
@@ -23,7 +23,7 @@ impl Article {
         Article {
             id: ArticleId::generate(),
             hash: "".into(),
-            created: Utc::now().naive_utc(),
+            published: Utc::now().naive_utc(),
             modified: Utc::now().naive_utc(),
             modified_on_disk: Utc::now().naive_utc(),
             local_path: "".into(),

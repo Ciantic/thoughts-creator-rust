@@ -2,7 +2,7 @@
 CREATE TABLE articles (
   id                   VARCHAR (128)   NOT NULL PRIMARY KEY,
   hash                 VARCHAR (64)    NOT NULL,
-  created              DATETIME        NOT NULL,
+  published            DATETIME        NOT NULL,
   modified             DATETIME        NOT NULL,
   modified_on_disk     DATETIME        NOT NULL,
   local_path           VARCHAR (2048)  NOT NULL UNIQUE,

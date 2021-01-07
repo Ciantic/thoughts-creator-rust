@@ -2,7 +2,7 @@ table! {
     articles (id) {
         id -> Text,
         hash -> Text,
-        created -> Timestamp,
+        published -> Timestamp,
         modified -> Timestamp,
         modified_on_disk -> Timestamp,
         local_path -> Text,
