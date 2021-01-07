@@ -3,25 +3,6 @@ use derive_more::From;
 use regex::{Captures, Regex};
 use url::Url;
 
-pub struct RelativeUrl(String);
-
-impl RelativeUrl {
-    pub fn normalize(current_path: AbsoluteUrl) -> AbsoluteUrl {
-        let AbsoluteUrl(path) = current_path;
-        todo!()
-    }
-}
-
-pub struct AbsoluteUrl(String);
-
-pub fn get_external_urls(html: String) -> Vec<Url> {
-    todo!()
-}
-
-pub fn get_relative_urls(html: String) -> Vec<RelativeUrl> {
-    todo!()
-}
-
 #[derive(Debug, From)]
 pub enum Error {
     UrlCreationFailed,
@@ -30,18 +11,18 @@ pub enum Error {
 }
 
 #[derive(Debug)]
-pub struct NormalizedHtml {
-    html: String,
-    urls: Vec<Url>,
+pub struct ConvertedUrls {
+    pub html: String,
+    pub urls: Vec<Url>,
 }
 
 /// Normalizes all relative urls to be absolute file:// urls
-pub async fn normalize_html_relative_urls(
+pub async fn convert_html_urls(
     html: &str,
     current_path: &PathBuf,
     root_path: &PathBuf,
-) -> Result<NormalizedHtml, Error> {
-    let mut res = NormalizedHtml {
+) -> Result<ConvertedUrls, Error> {
+    let mut res = ConvertedUrls {
         html: "".into(),
         urls: vec![],
     };
@@ -93,7 +74,7 @@ pub async fn normalize_html_relative_urls(
 mod test_normalize_html_relative_urls {
     use std::io::ErrorKind;
 
-    use super::{normalize_html_relative_urls, Error};
+    use super::{convert_html_urls, Error};
 
     #[async_std::test]
     async fn test() {
@@ -122,7 +103,7 @@ end"#;
             <a href="https://www.example.com/">...</a>
 end"#;
 
-        let value = normalize_html_relative_urls(
+        let value = convert_html_urls(
             html,
             &"./examples/articles/".into(),
             &"./examples/layout/".into(),
@@ -150,7 +131,7 @@ end"#;
         "#;
 
         assert_err!(
-            normalize_html_relative_urls(
+            convert_html_urls(
                 html,
                 &"./examples/articles/".into(),
                 &"./examples/layout/".into(),
@@ -167,7 +148,7 @@ end"#;
         "#;
 
         assert_err!(
-            normalize_html_relative_urls(
+            convert_html_urls(
                 html,
                 &"./examples/articles/".into(),
                 &"./examples/layout/".into(),

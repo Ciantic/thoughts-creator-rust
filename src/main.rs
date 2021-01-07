@@ -11,7 +11,6 @@ mod urls;
 
 use crate::db::models::Article;
 use async_std::channel::unbounded;
-use async_std::path::PathBuf;
 use async_std::task::JoinHandle;
 use db::DbConnection;
 use derive_more::From;
@@ -22,14 +21,16 @@ use futures::future::join_all;
 use glob::glob;
 use markdown::compile_markdown_file;
 use r2d2::Pool;
+use std::{convert, path::PathBuf};
+use urls::convert_html_urls;
 
 embed_migrations!("migrations");
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct GenerateParams {
-    pub article_dir: String,
-    pub output_dir: String,
-    pub root_dir: String,
-    pub db_file: String,
+    pub article_dir: PathBuf,
+    pub output_dir: PathBuf,
+    pub root_dir: PathBuf,
+    pub db_file: PathBuf,
     pub clean_output: bool,
 }
 
@@ -38,20 +39,26 @@ enum Error {
     IOError(std::io::Error),
     DbError(db::Error),
     CompileMarkdownError(markdown::Error),
+    UrlConvertError(urls::Error),
 }
 
-async fn generate_article_db(file: PathBuf, pool: &DbConnection) -> Result<Article, Error> {
-    let cm = compile_markdown_file(&file).await?;
-    let mut article = Article::new();
-    article.title = cm.title;
-    article.local_path = cm.local_path.to_string_lossy().into_owned();
-    article.created = cm.published.naive_utc();
-    article.modified = cm.modified.naive_utc();
-    article.modified_on_disk = cm.modified_on_disk.naive_utc();
-    article.html = cm.html;
+async fn generate_article_db(
+    article_file: &PathBuf,
+    root_path: &PathBuf,
+    pool: &DbConnection,
+) -> Result<(Article, Vec<url::Url>), Error> {
+    let markdown = compile_markdown_file(&article_file.into()).await?;
+    let converted =
+        convert_html_urls(&markdown.html, &article_file.into(), &root_path.into()).await?;
 
-    // TODO: Colliding slugs?
-    article.server_path = format!("/articles/{}", cm.slug);
+    let mut article = Article::new();
+    article.title = markdown.title;
+    article.local_path = markdown.local_path.to_string_lossy().into_owned();
+    article.created = markdown.published.naive_utc();
+    article.modified = markdown.modified.naive_utc();
+    article.modified_on_disk = markdown.modified_on_disk.naive_utc();
+    article.html = converted.html;
+    article.server_path = format!("/articles/{}", markdown.slug); // TODO: Colliding slugs?
     article.save(&pool).await?;
 
     // get_relative_urls() -> url list
@@ -64,7 +71,7 @@ async fn generate_article_db(file: PathBuf, pool: &DbConnection) -> Result<Artic
     // generate_resources_db(&article).await?;
     // generate_images_db(&article).await?;
 
-    Ok(article)
+    Ok((article, converted.urls))
 }
 
 async fn generate_resources_db(article: &Article) -> Result<(), Error> {
@@ -87,13 +94,17 @@ async fn layout_article(article: Article, pool: &DbConnection) -> Result<String,
     todo!()
 }
 
-async fn generate_article(file: PathBuf, pool: &DbConnection) -> Result<(), Error> {
-    let article = generate_article_db(file, pool).await?;
+async fn generate_article(
+    params: &GenerateParams,
+    article_file: &PathBuf,
+    pool: &DbConnection,
+) -> Result<(), Error> {
+    let article = generate_article_db(&article_file, &params.root_dir, pool).await?;
     Ok(())
 }
 
 async fn generate(params: &GenerateParams, pool: DbConnection) {
-    let files_input = format!("{}/**/*.md", params.article_dir);
+    let files_input = format!("{}/**/*.md", params.article_dir.to_string_lossy());
     let files = glob(&files_input);
 
     // Initialize the DB
@@ -105,9 +116,10 @@ async fn generate(params: &GenerateParams, pool: DbConnection) {
 
         match entry {
             Ok(path) => {
+                let params = params.clone();
                 let thread = async_std::task::spawn(async move {
                     println!("path {}", path.display());
-                    generate_article_db(path.into(), &pool2).await?;
+                    generate_article_db(&path, &params.root_dir, &pool2).await?;
                     Ok(())
                 });
                 generate_threads.push(thread);
