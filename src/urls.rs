@@ -24,8 +24,9 @@ pub fn get_relative_urls(html: String) -> Vec<RelativeUrl> {
 
 #[derive(Debug, From)]
 pub enum Error {
-    CanonicalizationFailed(std::io::Error),
     UrlCreationFailed,
+    CanonicalizationFailed(std::io::Error),
+    FileOpenFailed(std::io::Error),
     UrlParsingFailed(url::ParseError),
 }
 
@@ -133,6 +134,7 @@ end"#;
         assert_eq!(value.urls.len(), 5);
     }
 
+    // from `matches` crate
     macro_rules! assert_err {
         ($expression:expr, $($pattern:tt)+) => {
             match $expression {
