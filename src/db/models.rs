@@ -1,4 +1,4 @@
-use super::{ArticleId, ImageId, ResourceId, UrlId};
+use super::{ArticleId, ImageId, PageId, UrlId};
 use crate::db::schema::*;
 use chrono::NaiveDateTime;
 use chrono::Utc;
@@ -8,7 +8,6 @@ use chrono::Utc;
 )]
 pub struct Article {
     pub id: ArticleId,
-    pub hash: String,
     pub published: NaiveDateTime,
     pub modified: NaiveDateTime,
     pub modified_on_disk: NaiveDateTime,
@@ -18,29 +17,29 @@ pub struct Article {
     pub html: String,
 }
 
-impl Article {
-    pub fn new() -> Article {
-        Article {
-            id: ArticleId::generate(),
-            hash: "".into(),
-            published: Utc::now().naive_utc(),
-            modified: Utc::now().naive_utc(),
-            modified_on_disk: Utc::now().naive_utc(),
-            local_path: "".into(),
-            server_path: "".into(),
-            title: "".into(),
-            html: "".into(),
-        }
-    }
-}
+// impl Article {
+//     pub fn new() -> Article {
+//         Article {
+//             id: ArticleId::generate(),
+//             hash: "".into(),
+//             published: Utc::now().naive_utc(),
+//             modified: Utc::now().naive_utc(),
+//             modified_on_disk: Utc::now().naive_utc(),
+//             local_path: "".into(),
+//             server_path: "".into(),
+//             title: "".into(),
+//             html: "".into(),
+//         }
+//     }
+// }
 
-#[derive(Debug, Queryable, Identifiable, Insertable, AsChangeset)]
-pub struct Resource {
-    pub id: ResourceId,
-    pub modified_on_disk: NaiveDateTime,
-    pub local_path: String,
-    pub server_path: String,
-}
+// #[derive(Debug, Queryable, Identifiable, Insertable, AsChangeset)]
+// pub struct Resource {
+//     pub id: ResourceId,
+//     pub modified_on_disk: NaiveDateTime,
+//     pub local_path: String,
+//     pub server_path: String,
+// }
 
 #[derive(Debug, Queryable, Identifiable, Insertable, AsChangeset)]
 pub struct Image {

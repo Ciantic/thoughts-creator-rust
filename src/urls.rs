@@ -1,13 +1,16 @@
+use std::io::ErrorKind;
+
 use async_std::path::PathBuf;
 use derive_more::From;
 use regex::{Captures, Regex};
 use url::Url;
 
-#[derive(Debug, From)]
+#[derive(Debug)]
 pub enum Error {
-    UrlCreationFailed,
-    CanonicalizationFailed(std::io::Error),
-    UrlParsingFailed(url::ParseError),
+    UrlCreationFailed(PathBuf),
+    FileNotFound(PathBuf),
+    CanonicalizationFailed(PathBuf, std::io::Error),
+    UrlParsingFailed(String, url::ParseError),
 }
 
 #[derive(Debug)]
@@ -48,7 +51,7 @@ pub async fn convert_html_urls(
 
         // If url location contains ':' it's external url, otherwise relative path
         let url = if value.contains(':') {
-            Url::parse(value)?
+            Url::parse(value).map_err(|er| Error::UrlParsingFailed(value.into(), er))?
         } else {
             let path = if let Some(rest) = value.strip_prefix('/') {
                 // Relative to root path
@@ -57,8 +60,16 @@ pub async fn convert_html_urls(
                 // Relative to current path
                 current_path.join(&value)
             };
-            let full_path = path.canonicalize().await?;
-            Url::from_file_path(full_path)?
+            let full_path = path.canonicalize().await.map_err(|err| {
+                if err.kind() == ErrorKind::NotFound {
+                    Error::FileNotFound(path)
+                } else {
+                    Error::CanonicalizationFailed(path, err)
+                }
+            })?;
+
+            let path = full_path.clone();
+            Url::from_file_path(full_path).map_err(|_| Error::UrlCreationFailed(path))?
         };
         res.html.insert_str(0, &html[end..last_pos]);
         res.html.insert_str(0, &url.to_string());
@@ -72,8 +83,6 @@ pub async fn convert_html_urls(
 
 #[cfg(test)]
 mod test_normalize_html_relative_urls {
-    use std::io::ErrorKind;
-
     use super::{convert_html_urls, Error};
 
     #[async_std::test]
@@ -89,7 +98,8 @@ mod test_normalize_html_relative_urls {
 
             <!-- Full urls -->
             <a href="https://www.example.com">...</a>
-end"#;
+            end"#;
+
         let expect_html = r#"first
             <!-- Relative to root path -->
             <link href="file:///C:/Source/Rust/cianticblog/examples/layout/style.css" />
@@ -101,7 +111,7 @@ end"#;
 
             <!-- Full urls -->
             <a href="https://www.example.com/">...</a>
-end"#;
+            end"#;
 
         let value = convert_html_urls(
             html,
@@ -137,7 +147,7 @@ end"#;
                 &"./examples/layout/".into(),
             )
             .await,
-            Err(Error::UrlParsingFailed(_))
+            Err(Error::UrlParsingFailed(val, _)) if val == ":broken"
         );
     }
 
@@ -154,7 +164,7 @@ end"#;
                 &"./examples/layout/".into(),
             )
             .await,
-            Err(Error::CanonicalizationFailed(er)) if er.kind() == ErrorKind::NotFound
+            Err(Error::FileNotFound(_))
         );
     }
 }

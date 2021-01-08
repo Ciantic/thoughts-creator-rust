@@ -1,7 +1,6 @@
 table! {
     articles (id) {
         id -> Text,
-        hash -> Text,
         published -> Timestamp,
         modified -> Timestamp,
         modified_on_disk -> Timestamp,
@@ -24,11 +23,15 @@ table! {
 }
 
 table! {
-    resources (id) {
+    pages (id) {
         id -> Text,
+        published -> Timestamp,
+        modified -> Timestamp,
         modified_on_disk -> Timestamp,
         local_path -> Text,
         server_path -> Text,
+        title -> Text,
+        html -> Text,
     }
 }
 
@@ -39,4 +42,9 @@ table! {
     }
 }
 
-allow_tables_to_appear_in_same_query!(articles, images, resources, urls,);
+allow_tables_to_appear_in_same_query!(
+    articles,
+    images,
+    pages,
+    urls,
+);

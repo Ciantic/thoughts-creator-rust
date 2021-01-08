@@ -58,11 +58,11 @@ macro_rules! generate_uuid_field {
         pub struct $name(uuid::Uuid);
 
         impl $name {
-            pub fn generate() -> $name {
+            pub fn new() -> $name {
                 $name(uuid::Uuid::new_v4())
             }
 
-            pub fn new(uuid: uuid::Uuid) -> $name {
+            pub fn from_uuid(uuid: uuid::Uuid) -> $name {
                 $name(uuid)
             }
         }
@@ -89,7 +89,7 @@ macro_rules! generate_uuid_field {
                 let db_value_str =
                     <String as FromSql<diesel::sql_types::Text, DB>>::from_sql(bytes)?;
                 let uuid_value = uuid::Uuid::parse_str(&db_value_str)?;
-                Ok($name::new(uuid_value))
+                Ok($name::from_uuid(uuid_value))
             }
         }
 
@@ -106,7 +106,7 @@ generate_uuid_field! {
 }
 
 generate_uuid_field! {
-    ResourceId
+    PageId
 }
 
 generate_uuid_field! {
