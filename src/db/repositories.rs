@@ -1,3 +1,4 @@
+use async_std::path::PathBuf;
 use chrono::Duration;
 use diesel::{r2d2::ConnectionManager, SqliteConnection};
 use r2d2::Pool;
@@ -36,5 +37,64 @@ impl Article {
             .unwrap();
 
         Ok(())
+    }
+
+    pub async fn clean_non_existing(
+        dbc: &DbConnection,
+        existing_article_files: &[&PathBuf],
+    ) -> DbResult<usize> {
+        let local_paths = existing_article_files
+            .iter()
+            .map(|s| s.to_string_lossy())
+            .collect::<Vec<_>>();
+
+        Ok(diesel::delete(articles)
+            .filter(local_path.ne_all(local_paths))
+            .execute(&dbc.get()?)?)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::db::DbConnection;
+
+    use super::super::ArticleId;
+    use super::Article;
+
+    #[async_std::test]
+    async fn test_clean_non_existing() {
+        let dbc = DbConnection::new_from_url(":memory:").await;
+        let test1 = Article {
+            html: "".into(),
+            id: ArticleId::new(),
+            local_path: "./examples/post01.md".into(),
+            modified: chrono::Local::now().naive_utc(),
+            modified_on_disk: chrono::Local::now().naive_utc(),
+            published: chrono::Local::now().naive_utc(),
+            server_path: "/examples/post01/".into(),
+            title: "Example post 01".into(),
+        };
+        let test2 = Article {
+            html: "".into(),
+            id: ArticleId::new(),
+            local_path: "./examples/post02.md".into(),
+            modified: chrono::Local::now().naive_utc(),
+            modified_on_disk: chrono::Local::now().naive_utc(),
+            published: chrono::Local::now().naive_utc(),
+            server_path: "/examples/post02/".into(),
+            title: "Example post 02".into(),
+        };
+        let test3 = Article {
+            html: "".into(),
+            id: ArticleId::new(),
+            local_path: "./examples/non-existing.md".into(),
+            modified: chrono::Local::now().naive_utc(),
+            modified_on_disk: chrono::Local::now().naive_utc(),
+            published: chrono::Local::now().naive_utc(),
+            server_path: "/examples/non-existing/".into(),
+            title: "Example non existing".into(),
+        };
+
+        let _ = test1.save(&dbc).await;
     }
 }

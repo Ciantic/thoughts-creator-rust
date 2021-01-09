@@ -27,7 +27,6 @@ use markdown::compile_markdown_file;
 use r2d2::Pool;
 use std::{convert, path::PathBuf, time::Duration};
 
-embed_migrations!("migrations");
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct GenerateParams {
     pub article_dir: PathBuf,
@@ -104,13 +103,10 @@ enum GenerateInput {
 }
 
 async fn generate(params: &GenerateParams) -> Result<(), GenerateError> {
-    let _ = async_std::fs::remove_file(&params.db_file);
-    let db_url = &params.db_file.to_string_lossy().into_owned();
-    let conman = ConnectionManager::<SqliteConnection>::new(db_url);
-    let pool = DbConnection::new(Pool::builder().max_size(15).build(conman).unwrap());
+    let _ = async_std::fs::remove_file(&params.db_file).await;
+    let pool = DbConnection::new(&params.db_file).await;
 
     // Initialize the DB
-    let _ = embedded_migrations::run_with_output(&pool.get().unwrap(), &mut std::io::stdout());
     let (sender, receiver) = unbounded();
     let article_dir = params.article_dir.clone();
     let pages_dir = params.pages_dir.clone();

@@ -2,17 +2,19 @@ pub mod models;
 pub mod repositories;
 pub mod schema;
 
+use derive_more::From;
 use diesel::{
     backend::Backend, deserialize, r2d2::ConnectionManager, serialize, serialize::Output,
     types::FromSql, types::ToSql, AsExpression, SqliteConnection,
 };
 use r2d2::{Pool, PooledConnection};
-use std::io::Write;
+use std::{io::Write, path::PathBuf};
 
-#[derive(Debug)]
+#[derive(Debug, From)]
 pub enum Error {
     NotFound,
     ConnectionError,
+    OtherDbError(diesel::result::Error),
 }
 
 pub type DbResult<T> = Result<T, Error>;
@@ -22,10 +24,23 @@ pub struct DbConnection {
     pool: Pool<ConnectionManager<SqliteConnection>>,
 }
 
+embed_migrations!("migrations");
+
 impl DbConnection {
-    pub fn new(pool: Pool<ConnectionManager<SqliteConnection>>) -> Self {
+    pub async fn new(database_path: &PathBuf) -> Self {
+        let db_url = &database_path.to_string_lossy().into_owned();
+        DbConnection::new_from_url(db_url).await
+    }
+
+    pub async fn new_from_url(database_url: &str) -> Self {
+        let conman = ConnectionManager::<SqliteConnection>::new(database_url);
+        let pool = Pool::builder().max_size(15).build(conman).unwrap();
+        embedded_migrations::run_with_output(&pool.get().unwrap(), &mut std::io::stdout()).unwrap();
         DbConnection { pool }
     }
+    // pub fn new(pool: Pool<ConnectionManager<SqliteConnection>>) -> Self {
+    //     DbConnection { pool }
+    // }
 
     pub fn get(&self) -> DbResult<PooledConnection<ConnectionManager<SqliteConnection>>> {
         let c: PooledConnection<ConnectionManager<SqliteConnection>> = self
