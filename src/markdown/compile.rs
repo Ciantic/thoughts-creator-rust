@@ -2,7 +2,7 @@ use async_std::{fs, path::PathBuf};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use derive_more::From;
 
-use crate::git;
+use crate::{git, utils::normalize};
 
 use super::{frontmatter, to_html::markdown_to_html};
 
@@ -27,7 +27,7 @@ pub struct CompiledMarkdown {
 }
 
 pub async fn compile_markdown_file(path: &PathBuf) -> Result<CompiledMarkdown, Error> {
-    let path = path.canonicalize().await?;
+    let path = normalize(path).await?;
     let content = fs::read_to_string(&path).await?;
     let metadata = fs::metadata(&path).await?;
     let modified_on_disk = metadata.modified()?.into();

@@ -9,14 +9,15 @@ mod generate_db;
 mod git;
 mod markdown;
 mod urls;
+mod utils;
 
 use crate::db::models::Article;
 use async_std::path::PathBuf;
 use async_std::{channel::unbounded, task::JoinHandle};
 use db::DbConnection;
 use derive_more::From;
-use generate_db::{generate_all, sync};
-use glob::glob;
+use generate_db::sync;
+use utils::normalize;
 
 #[derive(Clone)]
 pub struct GenerateParams {
@@ -100,18 +101,18 @@ async fn generate(params: &GenerateParams) -> Result<(), GenerateError> {
     let mut generate_db_task: Option<JoinHandle<()>> = None;
 
     // Initially, run Sync
-    let _ = sender.send(WatchMessage::Sync).await;
+    let _ = sender.send(Message::Sync).await;
 
     loop {
         match receiver.recv().await {
             Ok(msg) => match msg {
-                WatchMessage::Sync => {
+                Message::Sync => {
                     if let Some(thread) = generate_db_task {
                         thread.cancel().await;
                     }
                     generate_db_task = Some(sync(&params, &pool, &sender).await.unwrap());
                 }
-                WatchMessage::DbDone => {
+                Message::DbGenerated => {
                     println!("Done!");
                     break;
                 }
@@ -147,7 +148,7 @@ pub enum FilesChange {
 }
 
 #[derive(Debug)]
-pub enum WatchMessage {
+pub enum Message {
     Sync,
     Changes(Vec<FilesChange>),
     DbArticleError {
@@ -158,7 +159,7 @@ pub enum WatchMessage {
         path: PathBuf,
         urls: Vec<url::Url>,
     },
-    DbDone,
+    DbGenerated,
 }
 
 #[async_std::main]

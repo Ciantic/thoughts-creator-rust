@@ -5,6 +5,8 @@ use derive_more::From;
 use regex::{Captures, Regex};
 use url::Url;
 
+use crate::utils::normalize;
+
 #[derive(Debug)]
 pub enum Error {
     UrlCreationFailed(PathBuf),
@@ -55,12 +57,13 @@ pub async fn convert_html_urls(
         } else {
             let path = if let Some(rest) = value.strip_prefix('/') {
                 // Relative to root path
-                root_path.join(rest)
+                root_path.join(rest.replace("/", &std::path::MAIN_SEPARATOR.to_string()))
             } else {
                 // Relative to current path
-                current_path.join(&value)
+                current_path.join(value.replace("/", &std::path::MAIN_SEPARATOR.to_string()))
             };
-            let full_path = path.canonicalize().await.map_err(|err| {
+
+            let full_path = normalize(&path).await.map_err(|err| {
                 if err.kind() == ErrorKind::NotFound {
                     Error::FileNotFound(path)
                 } else {

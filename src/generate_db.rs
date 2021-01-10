@@ -1,11 +1,11 @@
-use crate::markdown::compile_markdown_file;
-use crate::urls::convert_html_urls;
-use crate::{db::models::Article, WatchMessage};
+use crate::{db::models::Article, Message};
 use crate::{db::DbConnection, FilesChange};
 use crate::{
     db::{ArticleId, PageId},
     GenerateParams,
 };
+use crate::{markdown::compile_markdown_file, utils::normalize};
+use crate::{urls::convert_html_urls, utils::normalize_sync};
 use async_std::channel::Sender;
 use async_std::path::PathBuf;
 use async_std::task::JoinHandle;
@@ -21,42 +21,6 @@ pub enum Error {
     CompileMarkdownError(crate::markdown::Error),
     UrlConvertError(crate::urls::Error),
     // UrlToFilePath,
-}
-
-pub async fn sync(
-    params: &GenerateParams,
-    dbc: &DbConnection,
-    sender: &Sender<WatchMessage>,
-) -> Result<JoinHandle<()>, Error> {
-    let article_dir = params.article_dir.clone();
-    let pages_dir = params.pages_dir.clone();
-    let root_dir = params.root_dir.clone();
-    // Get input markdown files
-    let article_files = glob(&format!("{}/**/*.md", article_dir.to_string_lossy()))?
-        .filter_map(Result::ok)
-        .map(|f| f.canonicalize().unwrap().into())
-        .collect::<Vec<PathBuf>>();
-
-    let page_files = glob(&format!("{}/**/*.md", pages_dir.to_string_lossy()))?
-        .filter_map(Result::ok)
-        .map(|f| f.canonicalize().unwrap().into())
-        .collect::<Vec<PathBuf>>();
-
-    Article::clean_non_existing(&dbc, article_files.as_slice()).await?;
-
-    // Initially, we assume all files changed, before watch starts
-    let msgs = vec![
-        FilesChange::ArticlesChanged {
-            files: article_files,
-        },
-        FilesChange::PagesChanged { files: page_files },
-    ];
-
-    let dbc = dbc.clone();
-    let sender = sender.clone();
-    Ok(async_std::task::spawn(async move {
-        generate_all(msgs, &root_dir, &dbc, &sender).await
-    }))
 }
 
 async fn generate_article_db(
@@ -86,13 +50,13 @@ async fn generate_article_db(
     Ok(converted.urls)
 }
 
-pub async fn generate_all(
+async fn generate_all(
     changes: Vec<FilesChange>,
     root_dir: &PathBuf,
     pool: &DbConnection,
-    sender: &Sender<WatchMessage>,
+    sender: &Sender<Message>,
 ) {
-    let mut generate_threads: Vec<JoinHandle<()>> = vec![];
+    let mut generate_tasks: Vec<JoinHandle<()>> = vec![];
 
     for m in changes {
         match m {
@@ -105,19 +69,18 @@ pub async fn generate_all(
                         let urls = generate_article_db(&path, &root_dir, &pool).await;
                         match urls {
                             Ok(urls) => {
-                                let _ = sender
-                                    .send(WatchMessage::DbArticleCreated { path, urls })
-                                    .await;
+                                let _ = sender.send(Message::DbArticleCreated { path, urls }).await;
                             }
                             Err(error) => {
-                                let _ = sender
-                                    .send(WatchMessage::DbArticleError { path, error })
-                                    .await;
+                                let _ = sender.send(Message::DbArticleError { path, error }).await;
                             }
                         };
                     });
-                    generate_threads.push(thread);
+                    generate_tasks.push(thread);
                 }
+            }
+            FilesChange::PagesChanged { files } => {
+                //
             }
             _ => (),
         }
@@ -132,6 +95,42 @@ pub async fn generate_all(
     //     generate_threads.push(thread);
     // }
 
-    join_all(generate_threads).await;
-    let _ = sender.send(WatchMessage::DbDone).await;
+    join_all(generate_tasks).await;
+    let _ = sender.send(Message::DbGenerated).await;
+}
+
+pub async fn sync(
+    params: &GenerateParams,
+    dbc: &DbConnection,
+    sender: &Sender<Message>,
+) -> Result<JoinHandle<()>, Error> {
+    let article_dir = params.article_dir.clone();
+    let pages_dir = params.pages_dir.clone();
+    let root_dir = params.root_dir.clone();
+    // Get input markdown files
+    let article_files = glob(&format!("{}/**/*.md", article_dir.to_string_lossy()))?
+        .filter_map(Result::ok)
+        .map(|f| normalize_sync(&f).unwrap().into())
+        .collect::<Vec<PathBuf>>();
+
+    let page_files = glob(&format!("{}/**/*.md", pages_dir.to_string_lossy()))?
+        .filter_map(Result::ok)
+        .map(|f| normalize_sync(&f).unwrap().into())
+        .collect::<Vec<PathBuf>>();
+
+    Article::clean_non_existing(&dbc, article_files.as_slice()).await?;
+
+    // Initially, we assume all files changed, before watch starts
+    let msgs = vec![
+        FilesChange::ArticlesChanged {
+            files: article_files,
+        },
+        FilesChange::PagesChanged { files: page_files },
+    ];
+
+    let dbc = dbc.clone();
+    let sender = sender.clone();
+    Ok(async_std::task::spawn(async move {
+        generate_all(msgs, &root_dir, &dbc, &sender).await
+    }))
 }
