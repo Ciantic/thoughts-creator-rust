@@ -41,7 +41,7 @@ impl Article {
 
     pub async fn clean_non_existing(
         dbc: &DbConnection,
-        existing_article_files: &[&PathBuf],
+        existing_article_files: &[PathBuf],
     ) -> DbResult<usize> {
         let local_paths = existing_article_files
             .iter()
@@ -61,9 +61,7 @@ mod test {
     use super::super::ArticleId;
     use super::Article;
 
-    #[async_std::test]
-    async fn test_clean_non_existing() {
-        let dbc = DbConnection::new_from_url(":memory:").await;
+    async fn create_test_articles(dbc: &DbConnection) {
         let test1 = Article {
             html: "".into(),
             id: ArticleId::new(),
@@ -96,5 +94,24 @@ mod test {
         };
 
         let _ = test1.save(&dbc).await;
+        let _ = test2.save(&dbc).await;
+        let _ = test3.save(&dbc).await;
+    }
+
+    #[async_std::test]
+    async fn test_clean_non_existing() {
+        let dbc = DbConnection::new_from_url(":memory:").await.unwrap();
+        create_test_articles(&dbc).await;
+
+        assert_eq!(Article::get_all(&dbc).await.unwrap().len(), 3);
+
+        Article::clean_non_existing(
+            &dbc,
+            &["./examples/post01.md".into(), "./examples/post02.md".into()],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(Article::get_all(&dbc).await.unwrap().len(), 2);
     }
 }

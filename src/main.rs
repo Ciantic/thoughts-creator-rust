@@ -11,24 +11,15 @@ mod markdown;
 mod urls;
 
 use crate::db::models::Article;
-use async_std::{
-    channel::{unbounded, Sender},
-    task::JoinHandle,
-};
+use async_std::path::PathBuf;
+use async_std::{channel::unbounded, task::JoinHandle};
 use db::DbConnection;
 use derive_more::From;
-use diesel::r2d2::ConnectionManager;
-use diesel::SqliteConnection;
-use diesel_migrations::embed_migrations;
-use futures::future::join_all;
-use generate_db::generate_all;
+use generate_db::{generate_all, sync};
 use glob::glob;
-use markdown::compile_markdown_file;
-use r2d2::Pool;
-use std::{convert, path::PathBuf, time::Duration};
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-struct GenerateParams {
+#[derive(Clone)]
+pub struct GenerateParams {
     pub article_dir: PathBuf,
     pub pages_dir: PathBuf,
     pub output_dir: PathBuf,
@@ -94,48 +85,33 @@ struct GenerateParams {
 
 #[derive(From, Debug)]
 enum GenerateError {
+    DbError(crate::db::Error),
     PatternError(glob::PatternError),
 }
 
-enum GenerateInput {
-    Article(PathBuf),
-    Page(PathBuf),
-}
-
 async fn generate(params: &GenerateParams) -> Result<(), GenerateError> {
-    let _ = async_std::fs::remove_file(&params.db_file).await;
-    let pool = DbConnection::new(&params.db_file).await;
+    // Re-create database on each run
+    // let _ = async_std::fs::remove_file(&params.db_file).await;
+    let pool = DbConnection::new(&params.db_file.clone().into()).await?;
 
     // Initialize the DB
     let (sender, receiver) = unbounded();
-    let article_dir = params.article_dir.clone();
-    let pages_dir = params.pages_dir.clone();
-    let root_dir = params.root_dir.clone();
 
-    // Get input markdown files
-    let article_files =
-        glob(&format!("{}/**/*.md", article_dir.to_string_lossy()))?.filter_map(Result::ok);
+    let mut generate_db_task: Option<JoinHandle<()>> = None;
 
-    let page_files =
-        glob(&format!("{}/**/*.md", pages_dir.to_string_lossy()))?.filter_map(Result::ok);
-
-    // Initially, we assume all files changed, before watch starts
-    let msgs = vec![
-        FilesChange::ArticlesChanged {
-            files: article_files.collect(),
-        },
-        FilesChange::PagesChanged {
-            files: page_files.collect(),
-        },
-    ];
-
-    async_std::task::spawn(async move { generate_all(msgs, &root_dir, &pool, &sender).await });
+    // Initially, run Sync
+    let _ = sender.send(WatchMessage::Sync).await;
 
     loop {
         match receiver.recv().await {
             Ok(msg) => match msg {
+                WatchMessage::Sync => {
+                    if let Some(thread) = generate_db_task {
+                        thread.cancel().await;
+                    }
+                    generate_db_task = Some(sync(&params, &pool, &sender).await.unwrap());
+                }
                 WatchMessage::DbDone => {
-                    //
                     println!("Done!");
                     break;
                 }
@@ -172,6 +148,7 @@ pub enum FilesChange {
 
 #[derive(Debug)]
 pub enum WatchMessage {
+    Sync,
     Changes(Vec<FilesChange>),
     DbArticleError {
         path: PathBuf,

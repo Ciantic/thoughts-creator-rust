@@ -1,14 +1,17 @@
-use crate::db::{ArticleId, PageId};
 use crate::markdown::compile_markdown_file;
 use crate::urls::convert_html_urls;
 use crate::{db::models::Article, WatchMessage};
 use crate::{db::DbConnection, FilesChange};
+use crate::{
+    db::{ArticleId, PageId},
+    GenerateParams,
+};
 use async_std::channel::Sender;
+use async_std::path::PathBuf;
 use async_std::task::JoinHandle;
 use derive_more::From;
 use futures::future::join_all;
 use glob::glob;
-use std::path::PathBuf;
 
 #[derive(Debug, From)]
 pub enum Error {
@@ -18,6 +21,42 @@ pub enum Error {
     CompileMarkdownError(crate::markdown::Error),
     UrlConvertError(crate::urls::Error),
     // UrlToFilePath,
+}
+
+pub async fn sync(
+    params: &GenerateParams,
+    dbc: &DbConnection,
+    sender: &Sender<WatchMessage>,
+) -> Result<JoinHandle<()>, Error> {
+    let article_dir = params.article_dir.clone();
+    let pages_dir = params.pages_dir.clone();
+    let root_dir = params.root_dir.clone();
+    // Get input markdown files
+    let article_files = glob(&format!("{}/**/*.md", article_dir.to_string_lossy()))?
+        .filter_map(Result::ok)
+        .map(|f| f.canonicalize().unwrap().into())
+        .collect::<Vec<PathBuf>>();
+
+    let page_files = glob(&format!("{}/**/*.md", pages_dir.to_string_lossy()))?
+        .filter_map(Result::ok)
+        .map(|f| f.canonicalize().unwrap().into())
+        .collect::<Vec<PathBuf>>();
+
+    Article::clean_non_existing(&dbc, article_files.as_slice()).await?;
+
+    // Initially, we assume all files changed, before watch starts
+    let msgs = vec![
+        FilesChange::ArticlesChanged {
+            files: article_files,
+        },
+        FilesChange::PagesChanged { files: page_files },
+    ];
+
+    let dbc = dbc.clone();
+    let sender = sender.clone();
+    Ok(async_std::task::spawn(async move {
+        generate_all(msgs, &root_dir, &dbc, &sender).await
+    }))
 }
 
 async fn generate_article_db(
@@ -52,7 +91,7 @@ pub async fn generate_all(
     root_dir: &PathBuf,
     pool: &DbConnection,
     sender: &Sender<WatchMessage>,
-) -> Result<(), Error> {
+) {
     let mut generate_threads: Vec<JoinHandle<()>> = vec![];
 
     for m in changes {
@@ -95,5 +134,4 @@ pub async fn generate_all(
 
     join_all(generate_threads).await;
     let _ = sender.send(WatchMessage::DbDone).await;
-    Ok(())
 }

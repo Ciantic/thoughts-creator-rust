@@ -13,6 +13,7 @@ use std::{io::Write, path::PathBuf};
 #[derive(Debug, From)]
 pub enum Error {
     NotFound,
+    MigrationError,
     ConnectionError,
     OtherDbError(diesel::result::Error),
 }
@@ -27,16 +28,20 @@ pub struct DbConnection {
 embed_migrations!("migrations");
 
 impl DbConnection {
-    pub async fn new(database_path: &PathBuf) -> Self {
+    pub async fn new(database_path: &PathBuf) -> Result<Self, Error> {
         let db_url = &database_path.to_string_lossy().into_owned();
-        DbConnection::new_from_url(db_url).await
+        Ok(DbConnection::new_from_url(db_url).await?)
     }
 
-    pub async fn new_from_url(database_url: &str) -> Self {
+    pub async fn new_from_url(database_url: &str) -> Result<Self, Error> {
         let conman = ConnectionManager::<SqliteConnection>::new(database_url);
-        let pool = Pool::builder().max_size(15).build(conman).unwrap();
-        embedded_migrations::run_with_output(&pool.get().unwrap(), &mut std::io::stdout()).unwrap();
-        DbConnection { pool }
+        let pool = Pool::builder()
+            .max_size(15)
+            .build(conman)
+            .map_err(|_er| Error::ConnectionError)?;
+        embedded_migrations::run_with_output(&pool.get().unwrap(), &mut std::io::stdout())
+            .map_err(|_er| Error::MigrationError)?;
+        Ok(DbConnection { pool })
     }
     // pub fn new(pool: Pool<ConnectionManager<SqliteConnection>>) -> Self {
     //     DbConnection { pool }
