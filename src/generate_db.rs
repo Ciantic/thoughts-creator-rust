@@ -4,8 +4,8 @@ use crate::{
     db::{ArticleId, PageId},
     GenerateParams,
 };
-use crate::{markdown::compile_markdown_file, utils::normalize};
-use crate::{urls::convert_html_urls, utils::normalize_sync};
+use crate::{markdown::compile_markdown_file, normalize::normalize};
+use crate::{normalize::normalize_sync, urls::convert_html_urls};
 use async_std::channel::Sender;
 use async_std::path::PathBuf;
 use async_std::task::JoinHandle;

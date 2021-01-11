@@ -2,7 +2,7 @@ use async_std::{fs, path::PathBuf};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use derive_more::From;
 
-use crate::{git, utils::normalize};
+use crate::{git, normalize::normalize};
 
 use super::{frontmatter, to_html::markdown_to_html};
 

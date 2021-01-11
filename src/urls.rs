@@ -5,7 +5,7 @@ use derive_more::From;
 use regex::{Captures, Regex};
 use url::Url;
 
-use crate::utils::normalize;
+use crate::normalize::normalize;
 
 #[derive(Debug)]
 pub enum Error {

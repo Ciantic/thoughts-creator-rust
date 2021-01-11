@@ -8,8 +8,8 @@ mod db;
 mod generate_db;
 mod git;
 mod markdown;
+mod normalize;
 mod urls;
-mod utils;
 
 use crate::db::models::Article;
 use async_std::path::PathBuf;
@@ -17,7 +17,7 @@ use async_std::{channel::unbounded, task::JoinHandle};
 use db::DbConnection;
 use derive_more::From;
 use generate_db::sync;
-use utils::normalize;
+use normalize::normalize;
 
 #[derive(Clone)]
 pub struct GenerateParams {
