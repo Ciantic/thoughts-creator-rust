@@ -7,6 +7,7 @@ extern crate diesel_migrations;
 mod db;
 mod generate_db;
 mod git;
+mod layout;
 mod markdown;
 mod normalize;
 mod urls;
