@@ -63,13 +63,13 @@ pub async fn convert_html_urls(
                 current_path.join(value.replace("/", &std::path::MAIN_SEPARATOR.to_string()))
             };
 
-            let full_path = normalize(&path).await.map_err(|err| {
-                if err.kind() == ErrorKind::NotFound {
-                    Error::FileNotFound(path)
-                } else {
-                    Error::CanonicalizationFailed(path, err)
-                }
-            })?;
+            let full_path = normalize(&path)
+                .await
+                .map_err(|err| Error::CanonicalizationFailed(path, err))?;
+
+            if !full_path.exists().await {
+                return Err(Error::FileNotFound(full_path));
+            }
 
             let path = full_path.clone();
             Url::from_file_path(full_path).map_err(|_| Error::UrlCreationFailed(path))?

@@ -17,6 +17,20 @@ pub struct Article {
     pub html: String,
 }
 
+#[derive(
+    Debug, Queryable, Identifiable, Insertable, AsChangeset, serde::Serialize, serde::Deserialize,
+)]
+pub struct Page {
+    pub id: PageId,
+    pub published: NaiveDateTime,
+    pub modified: NaiveDateTime,
+    pub modified_on_disk: NaiveDateTime,
+    pub local_path: String,
+    pub server_path: String,
+    pub title: String,
+    pub html: String,
+}
+
 // impl Article {
 //     pub fn new() -> Article {
 //         Article {

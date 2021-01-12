@@ -271,6 +271,7 @@ dependencies = [
  "diesel_migrations",
  "futures",
  "glob",
+ "normpath",
  "pulldown-cmark",
  "r2d2",
  "regex",
@@ -752,6 +753,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8123a81538e457d44b933a02faf885d3fe8408806b23fa700e8f01c6c3a98998"
 dependencies = [
  "libc",
+ "winapi",
+]
+
+[[package]]
+name = "normpath"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01f55d1a21e95222466b88a22a2d20e3d75effe221d8ed20ffdec03f0cf6f95e"
+dependencies = [
  "winapi",
 ]
 
