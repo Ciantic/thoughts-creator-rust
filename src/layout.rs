@@ -58,22 +58,25 @@ fn OgHead(og: Og) {
             <meta property={"og:description"} content={og.description} />
             <meta property={"og:site_name"} content={og.site_name} />
 
-            // Following doesn't work, render-rs seems to assume each return type must have same amount childs:
-            // {match og.ogtype {
-            //     OgType::Website => rsx! {
-            //         <>
-            //             <meta property={"og:type"} content={"website"} />
-            //         </>
-            //     },
-            //     OgType::Article { author, published, modified } => rsx! {
-            //         <>
-            //             <meta property={"article:author"} content={author} />
-            //             <meta property={"article:published_time"} content={iso8601(published)} />
-            //             <meta property={"article:modified_time"} content={iso8601(modified)} />
-            //             // <meta property={"article:publisher"} content={"https://www.facebook.com/YOURFBPAGE"} />
-            //         </>
-            //     },
-            // }}
+            {match og.ogtype {
+                OgType::Website => rsx! {
+                    <>
+                        <meta property={"og:type"} content={"website"} />
+                        // TODO: How can I get rid of these?
+                        // Render-rs seems to assume each same typed rsx! block must have same amount of childs...
+                        <meta />
+                        <meta />
+                    </>
+                },
+                OgType::Article { author, published, modified } => rsx! {
+                    <>
+                        <meta property={"article:author"} content={author} />
+                        <meta property={"article:published_time"} content={iso8601(published)} />
+                        <meta property={"article:modified_time"} content={iso8601(modified)} />
+                        // <meta property={"article:publisher"} content={"https://www.facebook.com/YOURFBPAGE"} />
+                    </>
+                },
+            }}
         </>
     }
 }
