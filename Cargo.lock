@@ -769,6 +769,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 
 [[package]]
+name = "proc-macro-error"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
+dependencies = [
+ "proc-macro-error-attr",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "version_check",
+]
+
+[[package]]
+name = "proc-macro-error-attr"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "version_check",
+]
+
+[[package]]
 name = "proc-macro-hack"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -889,8 +913,7 @@ checksum = "3b181ba2dcf07aaccad5448e8ead58db5b742cf85dfe035e2227f137a539a189"
 [[package]]
 name = "render"
 version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07528d0483b1b4727b1419c82ed4be46926971b08af764d9d2ef0ac04a47e202"
+source = "git+https://github.com/render-rs/render.rs.git?rev=aa10a9d961573a4f05129f68575d2b9e0cacde31#aa10a9d961573a4f05129f68575d2b9e0cacde31"
 dependencies = [
  "render_macros",
 ]
@@ -898,9 +921,9 @@ dependencies = [
 [[package]]
 name = "render_macros"
 version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6eec48d491a1f66f67c50545566b74a8c8435fe4b7dbf163d15a1e391aa4a2a7"
+source = "git+https://github.com/render-rs/render.rs.git?rev=aa10a9d961573a4f05129f68575d2b9e0cacde31#aa10a9d961573a4f05129f68575d2b9e0cacde31"
 dependencies = [
+ "proc-macro-error",
  "proc-macro2",
  "quote",
  "syn",
