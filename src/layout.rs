@@ -66,10 +66,12 @@ fn OgHead(og: Og) {
                         // Render-rs seems to assume each same typed rsx! block must have same amount of childs...
                         <meta />
                         <meta />
+                        <meta />
                     </>
                 },
                 OgType::Article { author, published, modified } => rsx! {
                     <>
+                        <meta property={"og:type"} content={"article"} />
                         <meta property={"article:author"} content={author} />
                         <meta property={"article:published_time"} content={iso8601(published)} />
                         <meta property={"article:modified_time"} content={iso8601(modified)} />
